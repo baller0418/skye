@@ -10,21 +10,21 @@ pub fn assemble_register(isa: &'static Isa, destination: u8, expression: &str) -
     let coefficient = registers[destination as usize];
 
     if coefficient == 0 {
-
+        // mov rd, imm32       REX.W C7 /0 id
         append_bytes!(output, [0x48, 0xC7, modrm(0b11, 0, destination)]);
         append_bytes!(output, constant.to_le_bytes());
 
     } else {
 
         if coefficient != 1 {
-
+        // imul rd, rd, imm32    REX.W 69 /r id
             append_bytes!(
                 output,
                 [0x48, 0x69, modrm(0b11, destination, destination)],
                 coefficient.to_le_bytes()
             );
         }
-
+        // add/sub rd, imm32   REX.W 81 /0 id
         if constant != 0 {
             append_bytes!(  output, [0x48, 0x81, modrm(0b11, 0, destination)], constant.to_le_bytes()  );
         }
@@ -222,6 +222,7 @@ pub fn assemble_memory_operation(isa: &'static Isa, operation_bytes: &[u8], regi
     output
 }
 
+// lea rd, [rip + disp32]    REX.W 8D /r, mod=00 rm=101 selects RIP-relative
 pub fn assemble_address(_isa: &'static Isa, register: u8) -> Vec<u8> {
     vec![0x48, 0x8D, modrm(0b00, register, 0b101)]
 }
@@ -253,6 +254,7 @@ pub fn assemble_compare(isa: &'static Isa, condition: &str) -> (Vec<u8>, Vec<u8>
         }
     }
 
+    // jcc rel32 — 0x0F then 0x80+cc; the caller makes the 4-byte displacement
     (output, vec![0x0F, condition_code])
 
 }
@@ -328,7 +330,7 @@ pub mod arm {
 
                 let inverted = !(constant as u32);
                 word(&mut output, 0x9280_0000 | ((inverted & 0xFFFF) << 5) | d);
-                
+
             } else {
 
                 let value = constant as u32;
@@ -417,6 +419,7 @@ pub mod arm {
         }
 
         let mut branch = Vec::new();
+
         word(&mut branch, 0x5400_0000 | cond);
 
         (compare, branch)

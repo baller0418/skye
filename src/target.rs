@@ -150,11 +150,14 @@ maketarget! {
 
 impl Isa {
     pub fn reg(&self, name: &str) -> u8 {
+
         let name = name.trim().trim_matches('|');
         let name = if name == "stack" { self.STACK } else { name };
+        
         self.REGS.iter().find(|(n,_)| *n == name)
             .unwrap_or_else(|| panic!("{}: unknown register {name}", self.NAME))
             .1
+
     }
 }
 
