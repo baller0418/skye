@@ -1,0 +1,10 @@
+#target arm
+reg r0 10;
+reg r3 10;
+jump equal if |r0| == |r3|;
+reg r1 1;
+jump finished;
+direct equal;
+reg r1 42;
+direct finished;
+syscall 93 |r1|

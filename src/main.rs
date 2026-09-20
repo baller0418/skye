@@ -2,61 +2,20 @@ mod bytestream;
 mod common;
 mod encoder;
 mod preprocess;
+mod target;
 
 use bytestream::ByteStream;
 
 fn main() {
 
-    let source_code = String::from(r#"
-reg rax 10;
-reg rbx 20;
-reg rcx |rax| + |rbx|;
-reg rdx |rcx| * 2 - 18;
+    let source_code = std::fs::read_to_string(
+        std::env::args().nth(1).unwrap_or("prog.src".into())
+    ).unwrap();
 
-store [rsp] rax;
-load rsi [rsp];
-store [rsp + 8] rbx;
-load rdi [rsp + 8];
+    let (isa, statements) = preprocess::preprocess(&source_code);
+    let mut stream = ByteStream::new(isa);
 
-data message "hello\n";
-data numbers 10 20 12;
-space value 8;
-
-addr rsi numbers;
-load rcx [rsi + 16];
-
-addr rbp value;
-store [rbp] rdx;
-load rcx [rbp];
-
-direct add_numbers {
-    reg rax |rax| + |rbx|;
-}
-
-call add_numbers;
-reg rax |rax| + 1;
-
-reg rax 10;
-reg rbx 10;
-
-jump equal if |rax| == |rbx|;
-reg rbx 1;
-jump finished;
-
-direct equal;
-reg rbx 42;
-
-direct finished;
-
-addr rsi message;
-syscall 1 1 |rsi| 6;
-
-syscall 60 |rbx|
-"#);
-
-    let mut stream = ByteStream::new();
-
-    for statement in preprocess::preprocess(&source_code) {
+    for statement in statements {
 
         let words: Vec<&str> = statement.split_whitespace().collect();
         let rest = statement[words[0].len()..].trim();
@@ -64,7 +23,7 @@ syscall 60 |rbx|
         match words[0] {
 
             "syscall" => {
-                for (register, argument) in common::SYSCALL_ARGS.iter().zip(&words[2..]) {
+                for (register, argument) in isa.SYSCALL_ARGS.iter().zip(&words[2..]) {
                     stream.process_register(register, argument);
                 }
 
@@ -88,7 +47,7 @@ syscall 60 |rbx|
 
             "jump" => match rest.split_once(" if ") {
                 Some((label, condition)) => stream.process_conditional_jump(label, condition),
-                None => stream.process_jump(&common::JUMP, rest),
+                None => stream.process_jump(isa.JUMP, rest),
             },
 
             "data" => {
@@ -98,7 +57,7 @@ syscall 60 |rbx|
 
             "}"     => stream.close_block(),
             "reg"   => stream.process_register(words[1], &words[2..].concat()),
-            "call"  => stream.process_jump(&common::CALL, rest),
+            "call"  => stream.process_jump(isa.CALL, rest),
             "ret"   => stream.process_ret(),
             "print" => stream.process_print(rest),
             "space" => stream.process_data(words[1], vec![0; words[2].parse().unwrap()]),

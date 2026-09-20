@@ -2,13 +2,19 @@ use std::collections::HashMap;
 
 type Macros<'a> = HashMap<&'a str, (Vec<&'a str>, &'a str)>;
 
-pub fn preprocess(source: &str) -> Vec<String> {
+pub fn preprocess(source: &str) -> (&'static crate::target::Isa, Vec<String>) {
 
     let source = char_literals(&strip_comments(source));
     let mut macros: Macros = HashMap::new();
+    let mut isa = crate::target::get("x86");
     let mut code = String::new();
 
     for line in source.lines() {
+
+        if let Some(name) = line.trim().strip_prefix("#target") {
+            isa = crate::target::get(name.trim().trim_end_matches(';'));
+            continue;
+        }
 
         match line.trim().strip_prefix("#def") {
 
@@ -29,13 +35,16 @@ pub fn preprocess(source: &str) -> Vec<String> {
         }
     }
 
+    macros.insert("EXIT",  (Vec::new(), isa.EXIT));
+    macros.insert("WRITE", (Vec::new(), isa.WRITE));
+
     let mut string_buffer = Vec::new();
 
     for statement in split_statements(&code) {
         expand(statement, &macros, &mut string_buffer);
     }
 
-    string_buffer
+    (isa, string_buffer)
 }
 
 fn expand(statement: &str, macros: &Macros, string_buffer: &mut Vec<String>) {

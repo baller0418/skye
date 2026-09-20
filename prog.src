@@ -1,0 +1,46 @@
+#target arm
+
+reg r0 10;
+reg r3 20;
+reg r1 |r0| + |r3|;
+reg r2 |r1| * 2 - 18;
+
+store [stack] r0;
+load r6 [stack];
+store [stack + 8] r3;
+load r7 [stack + 8];
+
+data message "hello\n";
+data numbers 10 20 12;
+space value 8;
+
+addr r6 numbers;
+load r1 [r6 + 16];
+
+addr r5 value;
+store [r5] r2;
+load r1 [r5];
+
+direct add_numbers {
+    reg r0 |r0| + |r3|;
+}
+
+call add_numbers;
+reg r0 |r0| + 1;
+
+reg r0 10;
+reg r3 10;
+
+jump equal if |r0| == |r3|;
+reg r3 1;
+jump finished;
+
+direct equal;
+reg r3 42;
+
+direct finished;
+
+addr r6 message;
+syscall WRITE 1 |r6| 6;
+
+syscall EXIT |r3|
