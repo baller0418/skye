@@ -1,52 +1,121 @@
 mod bytestream;
 mod common;
+mod encoder;
+mod preprocess;
 
 use bytestream::ByteStream;
 
 fn main() {
 
-    let source_code: &str = "
+    let source_code = String::from(r#"
+reg rax 10;
+reg rbx 20;
+reg rcx |rax| + |rbx|;
+reg rdx |rcx| * 2 - 18;
 
-    rg rbp 50+3;
-    rg rax 123 - |rbp|;
-    store [rsp] rax;
-    load rsi [rsp];
-    syscall 60
+store [rsp] rax;
+load rsi [rsp];
+store [rsp + 8] rbx;
+load rdi [rsp + 8];
 
-    ";
+data message "hello\n";
+data numbers 10 20 12;
+space value 8;
+
+addr rsi numbers;
+load rcx [rsi + 16];
+
+addr rbp value;
+store [rbp] rdx;
+load rcx [rbp];
+
+direct add_numbers {
+    reg rax |rax| + |rbx|;
+}
+
+call add_numbers;
+reg rax |rax| + 1;
+
+reg rax 10;
+reg rbx 10;
+
+jump equal if |rax| == |rbx|;
+reg rbx 1;
+jump finished;
+
+direct equal;
+reg rbx 42;
+
+direct finished;
+
+addr rsi message;
+syscall 1 1 |rsi| 6;
+
+syscall 60 |rbx|
+"#);
 
     let mut stream = ByteStream::new();
 
-    let statements: Vec<&str> = source_code
-        .trim()
-        .split_terminator(';')
-        .map(|x| x.trim())
-        .collect();
-
-    for statement in statements {
+    for statement in preprocess::preprocess(&source_code) {
 
         let words: Vec<&str> = statement.split_whitespace().collect();
+        let rest = statement[words[0].len()..].trim();
 
         match words[0] {
-            "syscall" => stream.process_syscall(words[1]),
-            "load" => stream.process_load(
-                words[1],
-                strip_parenthesis(words[2], ('[', ']')),
-            ),
-            "store" => stream.process_store(
-                strip_parenthesis(words[1], ('[', ']')),
-                words[2]),
-            "rg" => stream.process_register(words[1], words[2..].concat().as_str()),
+
+            "syscall" => {
+                for (register, argument) in common::SYSCALL_ARGS.iter().zip(&words[2..]) {
+                    stream.process_register(register, argument);
+                }
+
+                stream.process_syscall(words[1]);
+            }
+
+            "load" => {
+                let (destination, memory, _) = split_memory(rest);
+                stream.process_load(destination, memory);
+            }
+
+            "store" => {
+                let (_, memory, source) = split_memory(rest);
+                stream.process_store(memory, source);
+            }
+
+            "direct" => match rest.strip_suffix('{') {
+                Some(name) => stream.open_block(name.trim()),
+                None => stream.process_label(rest),
+            },
+
+            "jump" => match rest.split_once(" if ") {
+                Some((label, condition)) => stream.process_conditional_jump(label, condition),
+                None => stream.process_jump(&common::JUMP, rest),
+            },
+
+            "data" => {
+                let (name, value) = rest.split_once(' ').unwrap();
+                stream.process_data(name, encoder::parse_data(value.trim()));
+            }
+
+            "}"     => stream.close_block(),
+            "reg"   => stream.process_register(words[1], &words[2..].concat()),
+            "call"  => stream.process_jump(&common::CALL, rest),
+            "ret"   => stream.process_ret(),
+            "print" => stream.process_print(rest),
+            "space" => stream.process_data(words[1], vec![0; words[2].parse().unwrap()]),
+            "addr"  => stream.process_address(words[1], words[2]),
+
             _ => {}
         }
-
     }
 
-    stream.to_file("a.out");
+    stream.to_file("out");
+
 }
 
-fn strip_parenthesis(string: &str, parens: (char, char)) -> &str {
-    string
-        .trim_start_matches(parens.0)
-        .trim_end_matches(parens.1)
+fn split_memory(text: &str) -> (&str, &str, &str) {
+
+    let (before, rest) = text.split_once('[').unwrap();
+    let (inside, after) = rest.split_once(']').unwrap();
+
+    (before.trim(), inside.trim(), after.trim())
 }
