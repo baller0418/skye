@@ -107,7 +107,7 @@ fn strip_comments(source: &str) -> String {
 
 }
 
-fn substitute(text: &str, map: &HashMap<&str, &str>) -> String {
+pub fn substitute(text: &str, map: &HashMap<&str, &str>) -> String {
 
     let mut string_buffer = String::new();
     let mut word = String::new();

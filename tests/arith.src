@@ -1,0 +1,6 @@
+// expect: 12
+reg r0 10;
+reg r3 20;
+reg r1 |r0| + |r3|;
+reg r1 |r1| * 2 - 48;
+syscall EXIT |r1|

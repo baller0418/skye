@@ -1,0 +1,8 @@
+// expect: 7
+space slot 16;
+addr r5 slot;
+reg r0 7;
+store [r5 + 8] r0;
+reg r0 0;
+load r0 [r5 + 8];
+syscall EXIT |r0|

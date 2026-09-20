@@ -1,0 +1,8 @@
+// expect: 30
+direct add(left, right) -> result {
+    reg result |left| + |right|;
+}
+reg r0 10;
+reg r3 20;
+call add r0 r3 -> r1;
+syscall EXIT |r1|
