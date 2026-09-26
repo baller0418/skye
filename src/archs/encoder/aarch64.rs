@@ -1,4 +1,4 @@
-use crate::target::Isa;
+use crate::archs::target::Isa;
 
 use super::parse_expression;
 use super::register_operand;

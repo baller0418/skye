@@ -1,7 +1,7 @@
 use crate::append_bytes;
 use crate::common::*;
-use crate::target::Isa;
 
+use super::Isa;
 use super::parse_expression;
 use super::register_operand;
 

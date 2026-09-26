@@ -1,7 +1,7 @@
 pub mod aarch64;
 pub mod x86_64;
 
-use crate::target::Isa;
+pub use crate::archs::target::Isa;
 
 pub fn parse_expression(isa: &'static Isa, expression: &str) -> (i32, [i32; 32]) {
     fn parse(

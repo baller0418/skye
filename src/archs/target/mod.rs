@@ -7,7 +7,7 @@ mod x86_64;
 pub use aarch64::AARCH64;
 pub use x86_64::X86_64;
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, unused)]
 pub struct Isa {
     pub NAME: &'static str,
     pub MACHINE: u16,
@@ -46,6 +46,7 @@ pub fn get(name: &str) -> &'static Isa {
     }
 }
 
+#[cfg(test)]
 pub fn all() -> &'static [&'static Isa] {
     &[&X86_64, &AARCH64]
 }
@@ -69,7 +70,7 @@ mod tests {
     fn targets_have_distinct_machines() {
         let mut seen = std::collections::HashSet::new();
 
-        for isa in crate::target::all() {
+        for isa in crate::archs::target::all() {
             assert!(
                 seen.insert(isa.MACHINE),
                 "{} duplicates a machine id",

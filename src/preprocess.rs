@@ -2,24 +2,28 @@ use std::collections::HashMap;
 
 type Macros<'a> = HashMap<&'a str, (Vec<&'a str>, &'a str)>;
 
-pub fn preprocess(source: &str) -> (&'static crate::target::Isa, Vec<String>) {
+pub fn get_target_arch(source: &str) -> &'static crate::archs::target::Isa {
+    for line in source.lines() {
+        if let Some(name) = line.trim().strip_prefix("#target") {
+            return crate::archs::target::get(name.trim().trim_end_matches(';'));
+        }
+    }
 
+    crate::archs::target::get("x86")
+}
+
+pub fn preprocess(source: &str, isa: &'static crate::archs::target::Isa) -> Vec<String> {
     let source = char_literals(&strip_comments(source));
     let mut macros: Macros = HashMap::new();
-    let mut isa = crate::target::get("x86");
     let mut code = String::new();
 
     for line in source.lines() {
-
-        if let Some(name) = line.trim().strip_prefix("#target") {
-            isa = crate::target::get(name.trim().trim_end_matches(';'));
+        if line.trim().starts_with("#target") {
             continue;
         }
 
         match line.trim().strip_prefix("#def") {
-
             Some(definition) => {
-
                 let (head, body) = definition.split_once('@').unwrap();
                 let mut head = head.split_whitespace();
 
@@ -27,15 +31,13 @@ pub fn preprocess(source: &str) -> (&'static crate::target::Isa, Vec<String>) {
             }
 
             None => {
-
                 code.push_str(line);
                 code.push('\n');
-
             }
         }
     }
 
-    macros.insert("EXIT",  (Vec::new(), isa.EXIT));
+    macros.insert("EXIT", (Vec::new(), isa.EXIT));
     macros.insert("WRITE", (Vec::new(), isa.WRITE));
 
     let mut string_buffer = Vec::new();
@@ -44,16 +46,16 @@ pub fn preprocess(source: &str) -> (&'static crate::target::Isa, Vec<String>) {
         expand(statement, &macros, &mut string_buffer);
     }
 
-    (isa, string_buffer)
+    string_buffer
 }
 
 fn expand(statement: &str, macros: &Macros, string_buffer: &mut Vec<String>) {
-
     let words: Vec<&str> = statement.split_whitespace().collect();
 
     if let Some((params, body)) = macros.get(words[0]) {
-
-        let arguments: HashMap<&str, &str> = params.iter().copied()
+        let arguments: HashMap<&str, &str> = params
+            .iter()
+            .copied()
             .zip(words[1..].iter().copied())
             .collect();
 
@@ -66,36 +68,38 @@ fn expand(statement: &str, macros: &Macros, string_buffer: &mut Vec<String>) {
         return;
     }
 
-    let constants: HashMap<&str, &str> = macros.iter()
+    let constants: HashMap<&str, &str> = macros
+        .iter()
         .filter(|(_, (params, _))| params.is_empty())
         .map(|(name, (_, body))| (*name, *body))
         .collect();
 
     string_buffer.push(substitute(statement, &constants));
-
 }
 
 fn split_statements(source: &str) -> impl Iterator<Item = &str> {
-
     source
         .split_inclusive(|c| matches!(c, ';' | '{' | '}'))
         .map(|s| s.trim().trim_end_matches(';').trim())
         .filter(|s| !s.is_empty())
-
 }
 
 fn strip_comments(source: &str) -> String {
-
     let mut string_buffer = String::new();
     let mut chars = source.chars().peekable();
     let mut depth = 0;
 
     while let Some(c) = chars.next() {
-
         match (c, chars.peek()) {
-
-            ('/', Some('*')) => { chars.next(); depth += 1; }
-            ('*', Some('/')) if depth > 0 => { chars.next(); depth -= 1; string_buffer.push(' '); }
+            ('/', Some('*')) => {
+                chars.next();
+                depth += 1;
+            }
+            ('*', Some('/')) if depth > 0 => {
+                chars.next();
+                depth -= 1;
+                string_buffer.push(' ');
+            }
             ('/', Some('/')) if depth == 0 => while chars.next_if(|&c| c != '\n').is_some() {},
 
             _ if depth > 0 => {}
@@ -104,16 +108,13 @@ fn strip_comments(source: &str) -> String {
     }
 
     string_buffer
-
 }
 
 pub fn substitute(text: &str, map: &HashMap<&str, &str>) -> String {
-
     let mut string_buffer = String::new();
     let mut word = String::new();
 
     for char in text.chars() {
-
         if char.is_alphanumeric() || char == '_' {
             word.push(char);
             continue;
@@ -126,16 +127,13 @@ pub fn substitute(text: &str, map: &HashMap<&str, &str>) -> String {
 
     string_buffer.push_str(map.get(word.as_str()).copied().unwrap_or(&word));
     string_buffer
-
 }
 
 fn char_literals(source: &str) -> String {
-
     let mut string_buffer = String::new();
     let mut chars = source.chars();
 
     while let Some(char) = chars.next() {
-
         if char != '\'' {
             string_buffer.push(char);
             continue;
@@ -156,5 +154,4 @@ fn char_literals(source: &str) -> String {
     }
 
     string_buffer
-    
 }

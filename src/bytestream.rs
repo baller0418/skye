@@ -1,7 +1,6 @@
-use crate::join_bytes;
+use crate::append_bytes;
+use crate::archs::*;
 use crate::common;
-use crate::encoder;
-use crate::target;
 
 use std::collections::HashMap;
 
@@ -16,11 +15,16 @@ pub struct ByteStream {
 }
 
 impl ByteStream {
-
     pub fn new(isa: &'static target::Isa) -> Self {
+        let mut raw_stream = Vec::new();
+        append_bytes!(
+            raw_stream,
+            common::ELF64_HEADER,
+            common::ELF64_PROGRAM_HEADER
+        );
 
         Self {
-            raw_stream: join_bytes!(common::ELF64_HEADER, common::ELF64_PROGRAM_HEADER),
+            raw_stream,
             labels: HashMap::new(),
             fixups: Vec::new(),
             block_stack: Vec::new(),
@@ -28,7 +32,6 @@ impl ByteStream {
             data: Vec::new(),
             isa,
         }
-
     }
 
     fn emit(&mut self, bytes: &[u8]) {
@@ -45,7 +48,6 @@ impl ByteStream {
     }
 
     pub fn process_jump(&mut self, opcode: &[u8], label: &str) {
-
         let start = self.raw_stream.len();
         self.emit(opcode);
 
@@ -53,39 +55,24 @@ impl ByteStream {
         self.emit(&vec![0; self.isa.REL_WIDTH]);
 
         self.fixups.push((start, slot, label.to_string()));
-
     }
 
     pub fn process_conditional_jump(&mut self, label: &str, condition: &str) {
-
         let (compare, opcode) = (self.isa.ENC_CMP)(self.isa, condition);
 
         self.emit(&compare);
         self.process_jump(&opcode, label);
-
     }
 
     pub fn process_ret(&mut self) {
         self.emit(self.isa.RET);
     }
 
-    pub fn open_block(&mut self, name: &str) {
-
-        let end = self.new_label("end");
-
-        self.process_jump(self.isa.JUMP, &end);
-        self.process_label(name);
-        self.block_stack.push(end);
-
-    }
-
     pub fn close_block(&mut self) {
-
         let end = self.block_stack.pop().unwrap();
 
         self.process_ret();
         self.process_label(&end);
-
     }
 
     pub fn process_register(&mut self, name: &str, value: &str) {
@@ -94,10 +81,8 @@ impl ByteStream {
     }
 
     pub fn process_syscall(&mut self, value: &str) {
-
         self.process_register(self.isa.SYSCALL_NUM, value);
         self.emit(self.isa.SYSCALL);
-
     }
 
     pub fn process_store(&mut self, memory: &str, source: &str) {
@@ -120,9 +105,7 @@ impl ByteStream {
     }
 
     pub fn process_print(&mut self, text: &str) {
-
         let (label, length) = match text.strip_prefix('"') {
-
             Some(literal) => {
                 let label = self.new_label("str");
                 let bytes = encoder::unescape(literal.trim_end_matches('"'));
@@ -133,7 +116,13 @@ impl ByteStream {
             }
 
             None => {
-                let length = self.data.iter().find(|(name, _)| name == text).unwrap().1.len();
+                let length = self
+                    .data
+                    .iter()
+                    .find(|(name, _)| name == text)
+                    .unwrap()
+                    .1
+                    .len();
                 (text.to_string(), length)
             }
         };
@@ -142,20 +131,16 @@ impl ByteStream {
         self.process_address(self.isa.SYSCALL_ARGS[1], &label);
         self.process_register(self.isa.SYSCALL_ARGS[2], &length.to_string());
         self.process_syscall(&self.isa.WRITE.to_string());
-
     }
 
     fn resolve_fixups(&mut self) {
-
         for (start, slot, label) in std::mem::take(&mut self.fixups) {
             let target = self.labels[&label];
             (self.isa.PATCH)(&mut self.raw_stream, start, slot, target);
         }
-
     }
 
     pub fn to_file(&mut self, path: &str) {
-
         for (label, bytes) in std::mem::take(&mut self.data) {
             self.process_label(&label);
             self.emit(&bytes);
@@ -185,9 +170,7 @@ impl ByteStream {
             permissions.set_mode(0o755);
             std::fs::set_permissions(path, permissions).unwrap();
         }
-
     }
-
 }
 
 fn patch(out: &mut [u8], at: usize, bytes: &[u8]) {

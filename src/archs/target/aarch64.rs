@@ -1,4 +1,4 @@
-use crate::encoder::aarch64;
+use crate::archs::encoder;
 
 pub const AARCH64: super::Isa = super::Isa {
     NAME: "aarch64",
@@ -32,10 +32,10 @@ pub const AARCH64: super::Isa = super::Isa {
 
     REL_WIDTH: 0,
 
-    ENC_REG: aarch64::assemble_register,
-    ENC_MEM: aarch64::assemble_memory_operation,
-    ENC_ADDR: aarch64::assemble_address,
-    ENC_CMP: aarch64::assemble_compare,
+    ENC_REG: encoder::aarch64::assemble_register,
+    ENC_MEM: encoder::aarch64::assemble_memory_operation,
+    ENC_ADDR: encoder::aarch64::assemble_address,
+    ENC_CMP: encoder::aarch64::assemble_compare,
 
     PATCH: |out, start, _slot, target| {
         let word = u32::from_le_bytes(out[start..start + 4].try_into().unwrap());

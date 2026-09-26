@@ -1,4 +1,4 @@
-use crate::encoder::x86_64;
+pub use crate::archs::encoder;
 
 pub const X86_64: super::Isa = super::Isa {
     NAME: "x86_64",
@@ -31,10 +31,10 @@ pub const X86_64: super::Isa = super::Isa {
 
     REL_WIDTH: 4,
 
-    ENC_REG: x86_64::assemble_register,
-    ENC_MEM: x86_64::assemble_memory_operation,
-    ENC_ADDR: x86_64::assemble_address,
-    ENC_CMP: x86_64::assemble_compare,
+    ENC_REG: encoder::x86_64::assemble_register,
+    ENC_MEM: encoder::x86_64::assemble_memory_operation,
+    ENC_ADDR: encoder::x86_64::assemble_address,
+    ENC_CMP: encoder::x86_64::assemble_compare,
 
     PATCH: |out, _start, slot, target| {
         let rel = target as i32 - (slot as i32 + 4);
