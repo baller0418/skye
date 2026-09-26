@@ -10,7 +10,7 @@ load r6 [stack];
 store [stack + 8] r3;
 load r7 [stack + 8];
 
-data message "hello\n";
+data message "boo\n";
 data numbers 10 20 12;
 space value 8;
 
