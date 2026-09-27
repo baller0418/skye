@@ -2,12 +2,17 @@ use crate::archs::target::Isa;
 
 use super::parse_expression;
 use super::register_operand;
+use super::{BitwiseOperator, split_bitwise_expression, strip_outer_parentheses};
 
 fn word(out: &mut Vec<u8>, w: u32) {
     out.extend_from_slice(&w.to_le_bytes());
 }
 
 pub fn assemble_register(isa: &'static Isa, destination: u8, expression: &str) -> Vec<u8> {
+    if split_bitwise_expression(expression).is_some() || expression.trim_start().starts_with('~') {
+        return assemble_bitwise_register(isa, destination, expression);
+    }
+
     assert!(
         destination != 31,
         "aarch64: cannot use stack as an arithmetic destination"
@@ -16,20 +21,20 @@ pub fn assemble_register(isa: &'static Isa, destination: u8, expression: &str) -
     let (constant, registers) = parse_expression(isa, expression);
     let mut output = Vec::new();
 
-    let d = destination as u32;
+    let u32_destination = destination as u32;
 
     let coefficient = registers[destination as usize];
 
     if coefficient == 0 {
         if constant < 0 {
             let inverted = !(constant as u32);
-            word(&mut output, 0x9280_0000 | ((inverted & 0xFFFF) << 5) | d);
+            word(&mut output, 0x9280_0000 | ((inverted & 0xFFFF) << 5) | u32_destination);
         } else {
             let value = constant as u32;
-            word(&mut output, 0xD280_0000 | ((value & 0xFFFF) << 5) | d);
+            word(&mut output, 0xD280_0000 | ((value & 0xFFFF) << 5) | u32_destination);
 
             if value >> 16 != 0 {
-                word(&mut output, 0xF2A0_0000 | ((value >> 16) << 5) | d);
+                word(&mut output, 0xF2A0_0000 | ((value >> 16) << 5) | u32_destination);
             }
         }
     } else {
@@ -38,7 +43,7 @@ pub fn assemble_register(isa: &'static Isa, destination: u8, expression: &str) -
                 &mut output,
                 0xD280_0000 | ((coefficient.unsigned_abs() & 0xFFFF) << 5) | 9,
             );
-            word(&mut output, 0x9B00_7C00 | (9 << 16) | (d << 5) | d);
+            word(&mut output, 0x9B00_7C00 | (9 << 16) | (u32_destination << 5) | u32_destination);
         }
 
         if constant != 0 {
@@ -50,7 +55,7 @@ pub fn assemble_register(isa: &'static Isa, destination: u8, expression: &str) -
 
             word(
                 &mut output,
-                base | ((constant.unsigned_abs() & 0xFFF) << 10) | (d << 5) | d,
+                base | ((constant.unsigned_abs() & 0xFFF) << 10) | (u32_destination << 5) | u32_destination,
             );
         }
     }
@@ -69,9 +74,58 @@ pub fn assemble_register(isa: &'static Isa, destination: u8, expression: &str) -
         let m = register as u32;
 
         for _ in 0..coefficient.unsigned_abs() {
-            word(&mut output, base | (m << 16) | (d << 5) | d);
+            word(&mut output, base | (m << 16) | (u32_destination << 5) | u32_destination);
         }
     }
+
+    output
+}
+
+fn assemble_bitwise_register(isa: &'static Isa, destination: u8, expression: &str) -> Vec<u8> {
+    assemble_bitwise_register_with_scratch(isa, destination, expression, 9)
+}
+
+fn assemble_bitwise_register_with_scratch(
+    isa: &'static Isa,
+    destination: u8,
+    expression: &str,
+    scratch: u8,
+) -> Vec<u8> {
+    let expression = strip_outer_parentheses(expression);
+
+    if let Some(operand) = expression.strip_prefix('~') {
+        let mut output = assemble_bitwise_register_with_scratch(isa, destination, operand, scratch);
+        // MVN Xd, (Xm is the ORN alias with XZR as the first source)
+        word(
+            &mut output,
+            0xAA20_03E0 | ((destination as u32) << 16) | destination as u32,
+        );
+        return output;
+    }
+
+    let Some((left, operation, right)) = split_bitwise_expression(expression) else {
+        return assemble_register(isa, destination, expression);
+    };
+
+    let mut output = assemble_bitwise_register_with_scratch(isa, destination, left, scratch);
+    let source = scratch;
+    let next_scratch = if scratch == 9 { 10 } else { 9 };
+    output.extend(assemble_bitwise_register_with_scratch(
+        isa,
+        source,
+        right,
+        next_scratch,
+    ));
+
+    let base = match operation {
+        BitwiseOperator::And => 0x8A00_0000,
+        BitwiseOperator::Or => 0xAA00_0000,
+        BitwiseOperator::Xor => 0xCA00_0000,
+        BitwiseOperator::ShiftLeft => 0x9AC0_2000,
+        BitwiseOperator::ShiftRight => 0x9AC0_2400,
+    };
+    let d = destination as u32;
+    word(&mut output, base | ((source as u32) << 16) | (d << 5) | d);
 
     output
 }

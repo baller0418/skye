@@ -3,6 +3,103 @@ pub mod x86_64;
 
 pub use crate::archs::target::Isa;
 
+#[derive(Clone, Copy)]
+pub enum BitwiseOperator {
+    And,
+    Or,
+    Xor,
+    ShiftLeft,
+    ShiftRight,
+}
+
+/// Returns the lowest-precedence top-level bitwise operation in an expression.
+/// Register operands use `|name|`, so a `|` only counts as OR when it is not
+/// the delimiter of such an operand.
+pub fn split_bitwise_expression(expression: &str) -> Option<(&str, BitwiseOperator, &str)> {
+    for (needle, operator) in [
+        (b'|', BitwiseOperator::Or),
+        (b'^', BitwiseOperator::Xor),
+        (b'&', BitwiseOperator::And),
+    ] {
+        if let Some(index) = find_top_level(expression.as_bytes(), needle, false) {
+            return Some((&expression[..index], operator, &expression[index + 1..]));
+        }
+    }
+
+    for (needle, operator) in [
+        (b'<', BitwiseOperator::ShiftLeft),
+        (b'>', BitwiseOperator::ShiftRight),
+    ] {
+        if let Some(index) = find_top_level(expression.as_bytes(), needle, true) {
+            return Some((&expression[..index], operator, &expression[index + 2..]));
+        }
+    }
+
+    None
+}
+
+pub fn strip_outer_parentheses(expression: &str) -> &str {
+    let expression = expression.trim();
+    if !expression.starts_with('(') || !expression.ends_with(')') {
+        return expression;
+    }
+
+    let mut depth = 0;
+    for (index, byte) in expression.bytes().enumerate() {
+        match byte {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 && index + 1 != expression.len() {
+                    return expression;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    &expression[1..expression.len() - 1]
+}
+
+fn find_top_level(bytes: &[u8], needle: u8, doubled: bool) -> Option<usize> {
+    let mut result = None;
+    let mut depth = 0;
+    let mut in_register = false;
+    let mut position = 0;
+
+    while position < bytes.len() {
+        match bytes[position] {
+            b'(' if !in_register => depth += 1,
+            b')' if !in_register => depth -= 1,
+            b'|' if needle == b'|' && !in_register && depth == 0 => {
+                // A pipe begins a register only when the next pipe encloses a name.
+                let next = bytes[position + 1..].iter().position(|&b| b == b'|');
+                if next.is_some_and(|end| {
+                    !bytes[position + 1..position + 1 + end]
+                        .iter()
+                        .any(|b| b.is_ascii_whitespace() || matches!(*b, b'&' | b'^' | b'(' | b')'))
+                }) {
+                    in_register = true;
+                } else {
+                    result = Some(position);
+                }
+            }
+            b'|' if in_register => in_register = false,
+            byte if !in_register && depth == 0 && byte == needle => {
+                if !doubled || bytes.get(position + 1) == Some(&needle) {
+                    result = Some(position);
+                    position += usize::from(doubled);
+                }
+            }
+            _ => {}
+        }
+
+        position += 1;
+    }
+
+    result
+}
+
 pub fn parse_expression(isa: &'static Isa, expression: &str) -> (i32, [i32; 32]) {
     fn parse(
         isa: &'static Isa,

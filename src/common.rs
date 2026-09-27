@@ -1,5 +1,3 @@
-#[cfg_attr(rustfmt, rustfmt::skip)]
-
 #[macro_export]
 macro_rules! append_bytes {
     ($target:expr, $($bytes:expr),* $(,)?) => {{
@@ -20,9 +18,6 @@ pub const ELF64_PROGRAM_HEADER: [u8; 56] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10, 0, 0, 0, 0, 0, 0,
 ];
 
-pub const ADD: [u8; 2] = [0x48, 0x01];
-pub const SUB: [u8; 2] = [0x48, 0x29];
-
 pub const fn modrm(mode: u8, reg: u8, rm: u8) -> u8 {
-    mode << 6 | reg << 3 | rm
+    mode << 6 | (reg & 7) << 3 | (rm & 7)
 }

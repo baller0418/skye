@@ -1,0 +1,8 @@
+// expect: 235
+reg r0 (12 & 10) | (1 << 3);
+reg r0 |r0| | 1;
+reg r0 |r0| ^ 3;
+reg r0 |r0| << 2;
+reg r0 |r0| >> 1;
+reg r0 ~|r0| & 255;
+syscall EXIT |r0|
